@@ -1,0 +1,418 @@
+import Database from 'better-sqlite3'
+import path from 'path'
+
+const dbPath = path.join(process.cwd(), 'data', 'moltstore.db')
+const db = new Database(dbPath)
+
+// 테이블 초기화
+db.exec(`
+  CREATE TABLE IF NOT EXISTS apps (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    long_description TEXT NOT NULL,
+    category TEXT NOT NULL,
+    price REAL NOT NULL,
+    currency TEXT DEFAULT 'USD',
+    version TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    file_hash TEXT,
+    file_path TEXT,
+    verified INTEGER DEFAULT 0,
+    api_access INTEGER DEFAULT 1,
+    downloads INTEGER DEFAULT 0,
+    rating REAL DEFAULT 0.0,
+    developer_name TEXT NOT NULL,
+    developer_verified INTEGER DEFAULT 0,
+    uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    last_updated TEXT DEFAULT CURRENT_TIMESTAMP,
+    review_notes TEXT
+  )
+`)
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS app_features (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    app_id TEXT NOT NULL,
+    feature TEXT NOT NULL,
+    FOREIGN KEY (app_id) REFERENCES apps(id)
+  )
+`)
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS app_tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    app_id TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    FOREIGN KEY (app_id) REFERENCES apps(id)
+  )
+`)
+
+// 리뷰 테이블
+db.exec(`
+  CREATE TABLE IF NOT EXISTS app_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    app_id TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    user_email TEXT NOT NULL,
+    rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+    title TEXT NOT NULL,
+    comment TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    helpful_count INTEGER DEFAULT 0,
+    FOREIGN KEY (app_id) REFERENCES apps(id)
+  )
+`)
+
+// 버전 이력 테이블
+db.exec(`
+  CREATE TABLE IF NOT EXISTS app_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    app_id TEXT NOT NULL,
+    version TEXT NOT NULL,
+    release_notes TEXT,
+    file_hash TEXT,
+    file_path TEXT,
+    released_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (app_id) REFERENCES apps(id)
+  )
+`)
+
+// 다운로드 이력 테이블
+db.exec(`
+  CREATE TABLE IF NOT EXISTS app_downloads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    app_id TEXT NOT NULL,
+    user_email TEXT,
+    api_key TEXT,
+    downloaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (app_id) REFERENCES apps(id)
+  )
+`)
+
+// 보안 검증 이력 테이블
+db.exec(`
+  CREATE TABLE IF NOT EXISTS security_scans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    app_id TEXT NOT NULL,
+    scan_type TEXT NOT NULL,
+    passed INTEGER NOT NULL,
+    score INTEGER NOT NULL,
+    checks TEXT NOT NULL,
+    recommendation TEXT NOT NULL,
+    scanned_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (app_id) REFERENCES apps(id)
+  )
+`)
+
+export interface DbApp {
+  id: string
+  name: string
+  description: string
+  long_description: string
+  category: string
+  price: number
+  currency: string
+  version: string
+  status: 'pending' | 'in_review' | 'approved' | 'published' | 'rejected'
+  file_hash?: string
+  file_path?: string
+  verified: number
+  api_access: number
+  downloads: number
+  rating: number
+  developer_name: string
+  developer_verified: number
+  uploaded_at: string
+  last_updated: string
+  review_notes?: string
+}
+
+export interface DbAppWithDetails extends DbApp {
+  features: string[]
+  tags: string[]
+}
+
+// Apps CRUD
+export const createApp = (app: Omit<DbApp, 'id' | 'uploaded_at' | 'last_updated' | 'downloads' | 'rating' | 'verified'>) => {
+  const id = `app_${Date.now()}_${Math.random().toString(36).substring(7)}`
+  
+  const stmt = db.prepare(`
+    INSERT INTO apps (
+      id, name, description, long_description, category, price, currency, version,
+      status, file_hash, file_path, api_access, developer_name, developer_verified
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  
+  stmt.run(
+    id, app.name, app.description, app.long_description, app.category,
+    app.price, app.currency, app.version, app.status, app.file_hash, app.file_path,
+    app.api_access, app.developer_name, app.developer_verified
+  )
+  
+  return id
+}
+
+export const addAppFeatures = (appId: string, features: string[]) => {
+  const stmt = db.prepare('INSERT INTO app_features (app_id, feature) VALUES (?, ?)')
+  features.forEach(feature => {
+    if (feature.trim()) {
+      stmt.run(appId, feature)
+    }
+  })
+}
+
+export const addAppTags = (appId: string, tags: string[]) => {
+  const stmt = db.prepare('INSERT INTO app_tags (app_id, tag) VALUES (?, ?)')
+  tags.forEach(tag => {
+    if (tag.trim()) {
+      stmt.run(appId, tag)
+    }
+  })
+}
+
+export const getAppById = (id: string): DbAppWithDetails | null => {
+  const app = db.prepare('SELECT * FROM apps WHERE id = ?').get(id) as DbApp | undefined
+  if (!app) return null
+  
+  const features = db.prepare('SELECT feature FROM app_features WHERE app_id = ?')
+    .all(id)
+    .map((row: any) => row.feature)
+  
+  const tags = db.prepare('SELECT tag FROM app_tags WHERE app_id = ?')
+    .all(id)
+    .map((row: any) => row.tag)
+  
+  return { ...app, features, tags }
+}
+
+export const getAllApps = (status?: string): DbAppWithDetails[] => {
+  let query = 'SELECT * FROM apps'
+  let params: any[] = []
+  
+  if (status) {
+    query += ' WHERE status = ?'
+    params.push(status)
+  }
+  
+  query += ' ORDER BY uploaded_at DESC'
+  
+  const apps = db.prepare(query).all(...params) as DbApp[]
+  
+  return apps.map(app => {
+    const features = db.prepare('SELECT feature FROM app_features WHERE app_id = ?')
+      .all(app.id)
+      .map((row: any) => row.feature)
+    
+    const tags = db.prepare('SELECT tag FROM app_tags WHERE app_id = ?')
+      .all(app.id)
+      .map((row: any) => row.tag)
+    
+    return { ...app, features, tags }
+  })
+}
+
+export const updateAppStatus = (id: string, status: DbApp['status'], reviewNotes?: string) => {
+  const stmt = db.prepare(`
+    UPDATE apps 
+    SET status = ?, review_notes = ?, last_updated = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `)
+  stmt.run(status, reviewNotes || null, id)
+}
+
+export const updateAppVerified = (id: string, verified: boolean) => {
+  const stmt = db.prepare('UPDATE apps SET verified = ? WHERE id = ?')
+  stmt.run(verified ? 1 : 0, id)
+}
+
+export const searchApps = (query: string, category?: string): DbAppWithDetails[] => {
+  let sql = `
+    SELECT DISTINCT a.* FROM apps a
+    LEFT JOIN app_tags t ON a.id = t.app_id
+    WHERE a.status = 'published' AND (
+      a.name LIKE ? OR 
+      a.description LIKE ? OR 
+      t.tag LIKE ?
+    )
+  `
+  const params = [`%${query}%`, `%${query}%`, `%${query}%`]
+  
+  if (category && category !== 'All') {
+    sql += ' AND a.category = ?'
+    params.push(category)
+  }
+  
+  sql += ' ORDER BY a.downloads DESC, a.rating DESC'
+  
+  const apps = db.prepare(sql).all(...params) as DbApp[]
+  
+  return apps.map(app => {
+    const features = db.prepare('SELECT feature FROM app_features WHERE app_id = ?')
+      .all(app.id)
+      .map((row: any) => row.feature)
+    
+    const tags = db.prepare('SELECT tag FROM app_tags WHERE app_id = ?')
+      .all(app.id)
+      .map((row: any) => row.tag)
+    
+    return { ...app, features, tags }
+  })
+}
+
+// Reviews CRUD
+export interface DbReview {
+  id: number
+  app_id: string
+  user_name: string
+  user_email: string
+  rating: number
+  title: string
+  comment?: string
+  created_at: string
+  helpful_count: number
+}
+
+export const createReview = (review: Omit<DbReview, 'id' | 'created_at' | 'helpful_count'>) => {
+  const stmt = db.prepare(`
+    INSERT INTO app_reviews (app_id, user_name, user_email, rating, title, comment)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `)
+  const result = stmt.run(
+    review.app_id,
+    review.user_name,
+    review.user_email,
+    review.rating,
+    review.title,
+    review.comment || null
+  )
+  
+  // 앱 평점 업데이트
+  updateAppRating(review.app_id)
+  
+  return result.lastInsertRowid
+}
+
+export const getReviewsByApp = (appId: string): DbReview[] => {
+  const stmt = db.prepare('SELECT * FROM app_reviews WHERE app_id = ? ORDER BY created_at DESC')
+  return stmt.all(appId) as DbReview[]
+}
+
+export const updateAppRating = (appId: string) => {
+  const reviews = getReviewsByApp(appId)
+  if (reviews.length === 0) return
+  
+  const avgRating = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+  const roundedRating = Math.round(avgRating * 10) / 10
+  
+  const stmt = db.prepare('UPDATE apps SET rating = ? WHERE id = ?')
+  stmt.run(roundedRating, appId)
+}
+
+// Versions CRUD
+export interface DbVersion {
+  id: number
+  app_id: string
+  version: string
+  release_notes?: string
+  file_hash?: string
+  file_path?: string
+  released_at: string
+}
+
+export const createVersion = (version: Omit<DbVersion, 'id' | 'released_at'>) => {
+  const stmt = db.prepare(`
+    INSERT INTO app_versions (app_id, version, release_notes, file_hash, file_path)
+    VALUES (?, ?, ?, ?, ?)
+  `)
+  const result = stmt.run(
+    version.app_id,
+    version.version,
+    version.release_notes || null,
+    version.file_hash || null,
+    version.file_path || null
+  )
+  return result.lastInsertRowid
+}
+
+export const getVersionsByApp = (appId: string): DbVersion[] => {
+  const stmt = db.prepare('SELECT * FROM app_versions WHERE app_id = ? ORDER BY released_at DESC')
+  return stmt.all(appId) as DbVersion[]
+}
+
+// Downloads CRUD
+export interface DbDownload {
+  id: number
+  app_id: string
+  user_email?: string
+  api_key?: string
+  downloaded_at: string
+}
+
+export const recordDownload = (appId: string, userEmail?: string, apiKey?: string) => {
+  const stmt = db.prepare(`
+    INSERT INTO app_downloads (app_id, user_email, api_key)
+    VALUES (?, ?, ?)
+  `)
+  const result = stmt.run(appId, userEmail || null, apiKey || null)
+  
+  // 다운로드 카운트 증가
+  const updateStmt = db.prepare('UPDATE apps SET downloads = downloads + 1 WHERE id = ?')
+  updateStmt.run(appId)
+  
+  return result.lastInsertRowid
+}
+
+export const getDownloadStats = (appId: string) => {
+  const totalStmt = db.prepare('SELECT downloads FROM apps WHERE id = ?')
+  const total = (totalStmt.get(appId) as any)?.downloads || 0
+  
+  const recentStmt = db.prepare(`
+    SELECT COUNT(*) as count 
+    FROM app_downloads 
+    WHERE app_id = ? AND downloaded_at >= datetime('now', '-30 days')
+  `)
+  const recent = (recentStmt.get(appId) as any)?.count || 0
+  
+  return { total, last30Days: recent }
+}
+
+// Security Scans CRUD
+export interface DbSecurityScan {
+  id: number
+  app_id: string
+  scan_type: string
+  passed: number
+  score: number
+  checks: string
+  recommendation: string
+  scanned_at: string
+}
+
+export const createSecurityScan = (scan: Omit<DbSecurityScan, 'id' | 'scanned_at'>) => {
+  const stmt = db.prepare(`
+    INSERT INTO security_scans (app_id, scan_type, passed, score, checks, recommendation)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `)
+  const result = stmt.run(
+    scan.app_id,
+    scan.scan_type,
+    scan.passed,
+    scan.score,
+    scan.checks,
+    scan.recommendation
+  )
+  return result.lastInsertRowid
+}
+
+export const getSecurityScansByApp = (appId: string): DbSecurityScan[] => {
+  const stmt = db.prepare('SELECT * FROM security_scans WHERE app_id = ? ORDER BY scanned_at DESC')
+  return stmt.all(appId) as DbSecurityScan[]
+}
+
+export const getLatestSecurityScan = (appId: string): DbSecurityScan | null => {
+  const stmt = db.prepare('SELECT * FROM security_scans WHERE app_id = ? ORDER BY scanned_at DESC LIMIT 1')
+  return stmt.get(appId) as DbSecurityScan | null
+}
+
+export default db

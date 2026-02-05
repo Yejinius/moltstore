@@ -185,8 +185,8 @@ export default function Home() {
               © 2026 MoltStore. Yejinius + Jarvis.
             </div>
             <div className="flex gap-6">
-              <a href="#" className="text-gray-500 hover:text-gray-300 text-sm">Terms</a>
-              <a href="#" className="text-gray-500 hover:text-gray-300 text-sm">Privacy</a>
+              <Link href="/terms" className="text-gray-500 hover:text-gray-300 text-sm">Terms</Link>
+              <Link href="/privacy" className="text-gray-500 hover:text-gray-300 text-sm">Privacy</Link>
               <Link href="/docs" className="text-gray-500 hover:text-gray-300 text-sm">API Docs</Link>
             </div>
           </div>

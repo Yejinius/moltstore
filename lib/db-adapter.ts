@@ -30,6 +30,11 @@ export const {
   createSecurityScan,
   getSecurityScansByApp,
   getLatestSecurityScan,
+  getAppsByUserId,
+  getApiKeyByKey,
+  getUserProfile,
+  updateUserRole,
+  verifyDeveloper,
 } = db
 
 export default db

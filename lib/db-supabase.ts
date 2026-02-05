@@ -19,6 +19,7 @@ export const createApp = async (app: Omit<DbApp, 'id' | 'uploaded_at' | 'last_up
     file_hash: app.file_hash,
     file_path: app.file_path,
     api_access: app.api_access,
+    user_id: app.user_id,
     developer_name: app.developer_name,
     developer_verified: app.developer_verified,
   })
@@ -305,9 +306,99 @@ export const getLatestSecurityScan = async (appId: string): Promise<DbSecuritySc
     .order('scanned_at', { ascending: false })
     .limit(1)
     .single()
-  
+
   if (error) return null
   return data
+}
+
+// User & Auth functions
+
+/**
+ * Get apps by user ID (for developers)
+ */
+export const getAppsByUserId = async (userId: string): Promise<DbAppWithDetails[]> => {
+  const { data: apps, error } = await supabase
+    .from('apps')
+    .select('*')
+    .eq('user_id', userId)
+    .order('uploaded_at', { ascending: false })
+
+  if (error || !apps) return []
+
+  // Fetch features and tags for each app
+  const appsWithDetails = await Promise.all(
+    apps.map(async (app) => {
+      const { data: features } = await supabase
+        .from('app_features')
+        .select('feature')
+        .eq('app_id', app.id)
+
+      const { data: tags } = await supabase
+        .from('app_tags')
+        .select('tag')
+        .eq('app_id', app.id)
+
+      return {
+        ...app,
+        features: features?.map(f => f.feature) || [],
+        tags: tags?.map(t => t.tag) || [],
+      } as DbAppWithDetails
+    })
+  )
+
+  return appsWithDetails
+}
+
+/**
+ * Get API key record by key string
+ */
+export const getApiKeyByKey = async (key: string) => {
+  const { data, error } = await supabase
+    .from('api_keys')
+    .select('*')
+    .eq('key', key)
+    .single()
+
+  if (error) return null
+  return data
+}
+
+/**
+ * Get user profile by user ID
+ */
+export const getUserProfile = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('id', userId)
+    .single()
+
+  if (error) return null
+  return data
+}
+
+/**
+ * Update user role (admin only)
+ */
+export const updateUserRole = async (userId: string, role: 'admin' | 'developer' | 'user') => {
+  const { error } = await supabase
+    .from('user_profiles')
+    .update({ role })
+    .eq('id', userId)
+
+  if (error) throw error
+}
+
+/**
+ * Verify or unverify developer
+ */
+export const verifyDeveloper = async (userId: string, verified: boolean) => {
+  const { error } = await supabase
+    .from('user_profiles')
+    .update({ developer_verified: verified })
+    .eq('id', userId)
+
+  if (error) throw error
 }
 
 export default {
@@ -329,4 +420,9 @@ export default {
   createSecurityScan,
   getSecurityScansByApp,
   getLatestSecurityScan,
+  getAppsByUserId,
+  getApiKeyByKey,
+  getUserProfile,
+  updateUserRole,
+  verifyDeveloper,
 }

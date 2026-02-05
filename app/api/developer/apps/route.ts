@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAllApps } from '@/lib/db-adapter'
+import { getAllApps, getAppsByUserId } from '@/lib/db-adapter'
+import { requireRole } from '@/lib/auth-supabase'
 
 export async function GET(request: NextRequest) {
   try {
-    // TODO: 실제로는 사용자 인증 후 해당 개발자의 앱만 반환
-    // 지금은 모든 앱 반환
-    const apps = getAllApps()
-    
+    // Require developer or admin role
+    const user = await requireRole(['developer', 'admin'])
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Developer access required' },
+        { status: 403 }
+      )
+    }
+
+    // Admins can see all apps, developers only see their own
+    const apps = user.role === 'admin'
+      ? getAllApps()
+      : await getAppsByUserId(user.id)
+
     return NextResponse.json({
       success: true,
       apps,

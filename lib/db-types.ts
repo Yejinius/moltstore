@@ -16,6 +16,7 @@ export interface DbApp {
   api_access: number | boolean
   downloads: number
   rating: number
+  user_id?: string
   developer_name: string
   developer_verified: number | boolean
   uploaded_at: string
@@ -31,6 +32,7 @@ export interface DbAppWithDetails extends DbApp {
 export interface DbReview {
   id: number
   app_id: string
+  user_id?: string
   user_name: string
   user_email: string
   rating: number

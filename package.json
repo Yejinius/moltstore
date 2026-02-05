@@ -11,6 +11,7 @@
     "seed:reviews": "tsx scripts/seed-reviews.ts"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.93.3",
     "@types/better-sqlite3": "^7.6.13",
     "@vercel/blob": "^2.0.1",

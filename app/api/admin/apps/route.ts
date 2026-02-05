@@ -1,12 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllApps, updateAppStatus, getAppById } from '@/lib/db-adapter'
+import { requireRole } from '@/lib/auth-supabase'
 
-// GET - 모든 앱 조회
+// GET - 모든 앱 조회 (Admin only)
 export async function GET(request: NextRequest) {
   try {
+    // Admin authentication check
+    const user = await requireRole('admin')
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Admin access required' },
+        { status: 403 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
-    
+
     const apps = status ? getAllApps(status) : getAllApps()
     
     return NextResponse.json({
@@ -22,9 +33,19 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PATCH - 앱 상태 변경
+// PATCH - 앱 상태 변경 (Admin only)
 export async function PATCH(request: NextRequest) {
   try {
+    // Admin authentication check
+    const user = await requireRole('admin')
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Admin access required' },
+        { status: 403 }
+      )
+    }
+
     const body = await request.json()
     const { appId, status, reviewNotes } = body
     

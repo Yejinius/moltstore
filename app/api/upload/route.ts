@@ -4,9 +4,28 @@ import fs from 'fs/promises'
 import path from 'path'
 import { createApp, addAppFeatures, addAppTags, updateAppStatus, createSecurityScan } from '@/lib/db-adapter'
 import { autoReviewApp } from '@/lib/security'
+import { getUserFromRequest } from '@/lib/auth-supabase'
 
 export async function POST(request: NextRequest) {
   try {
+    // Authentication check
+    const user = await getUserFromRequest(request)
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please log in.' },
+        { status: 401 }
+      )
+    }
+
+    // Role check: only developers and admins can upload
+    if (user.role !== 'developer' && user.role !== 'admin') {
+      return NextResponse.json(
+        { error: 'Only developers can upload apps' },
+        { status: 403 }
+      )
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
     const appDataStr = formData.get('appData') as string
@@ -58,8 +77,9 @@ export async function POST(request: NextRequest) {
       file_hash: fileHash,
       file_path: filePath,
       api_access: 1,
-      developer_name: 'Test Developer', // TODO: 실제 사용자 정보 사용
-      developer_verified: 0,
+      user_id: user.id,
+      developer_name: user.full_name || user.email,
+      developer_verified: user.developer_verified ? 1 : 0,
     })
 
     // 기능 및 태그 저장

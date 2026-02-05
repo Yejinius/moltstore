@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import Database from '@supabase/supabase-js'
+import Database from 'better-sqlite3'
 import path from 'path'
 
 const dbPath = path.join(process.cwd(), 'data', 'moltstore.db')

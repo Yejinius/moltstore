@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateApiKey, checkRateLimit } from '@/lib/auth'
-import { getAppById } from '@/lib/db-adapter'
+import { getAppById, getApiKeyByKey } from '@/lib/db-adapter'
 
 export async function GET(
   request: NextRequest,
@@ -36,7 +36,7 @@ export async function GET(
 
     // 앱 조회
     const app = getAppById(params.id)
-    
+
     if (!app) {
       return NextResponse.json(
         { success: false, error: 'App not found', code: 'APP_NOT_FOUND' },
@@ -44,13 +44,19 @@ export async function GET(
       )
     }
 
-    // TODO: 실제로는 개발자 권한 확인 필요
-    // if (app.developer_name !== keyData.developer_name) {
-    //   return NextResponse.json(
-    //     { success: false, error: 'Unauthorized access', code: 'UNAUTHORIZED' },
-    //     { status: 403 }
-    //   )
-    // }
+    // 개발자 권한 확인: API 키의 user_id와 앱의 user_id 비교
+    const apiKeyRecord = await getApiKeyByKey(apiKey)
+
+    if (apiKeyRecord && apiKeyRecord.user_id && app.user_id) {
+      // user_id가 있는 경우, 소유자만 상태 확인 가능
+      if (apiKeyRecord.user_id !== app.user_id) {
+        return NextResponse.json(
+          { success: false, error: 'Unauthorized access to this app', code: 'UNAUTHORIZED' },
+          { status: 403 }
+        )
+      }
+    }
+    // user_id가 없는 경우 (레거시 데이터), 권한 체크 스킵
 
     // 심사 상태 응답
     const response = {

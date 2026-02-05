@@ -4,9 +4,11 @@ import { getAppById, getApiKeyByKey } from '@/lib/db-adapter'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
+
     // API 키 검증
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -35,7 +37,7 @@ export async function GET(
     }
 
     // 앱 조회
-    const app = getAppById(params.id)
+    const app = getAppById(id)
 
     if (!app) {
       return NextResponse.json(

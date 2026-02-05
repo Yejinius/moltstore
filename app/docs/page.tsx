@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import React from 'react'
 
 export default function DocsPage() {
   const apiDocPath = path.join(process.cwd(), 'docs', 'API.md')
@@ -8,7 +9,7 @@ export default function DocsPage() {
   // 간단한 마크다운 렌더링 (제목, 코드 블록만)
   const renderMarkdown = (md: string) => {
     const lines = md.split('\n')
-    const html: JSX.Element[] = []
+    const html: React.JSX.Element[] = []
     let inCodeBlock = false
     let codeBlockContent: string[] = []
     let codeBlockLang = ''

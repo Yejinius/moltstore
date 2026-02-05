@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateApiKey, checkRateLimit } from '@/lib/auth'
-import { searchApps, getAllApps } from '@/lib/db-adapter'
+import { searchApps } from '@/lib/db-adapter'
+import type { DbAppWithDetails } from '@/lib/db-types'
 
 export async function GET(request: NextRequest) {
   try {
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
     apps = apps.slice(0, limit)
 
     // API 응답 형식으로 변환
-    const results = apps.map(app => ({
+    const results = apps.map((app: DbAppWithDetails) => ({
       id: app.id,
       name: app.name,
       description: app.description,

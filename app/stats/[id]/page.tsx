@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'next'
+import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 
 interface Stats {

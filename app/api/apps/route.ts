@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllApps, searchApps } from '@/lib/db-adapter'
+import type { DbAppWithDetails } from '@/lib/db-types'
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
       apps = searchApps(query, category || undefined)
     } else if (category && category !== 'All') {
       // 카테고리 필터링
-      apps = getAllApps('published').filter(app => app.category === category)
+      apps = getAllApps('published').filter((app: DbAppWithDetails) => app.category === category)
     } else {
       // 전체 공개 앱
       apps = getAllApps('published')

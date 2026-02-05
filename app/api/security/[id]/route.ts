@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSecurityScansByApp, getLatestSecurityScan } from '@/lib/db-adapter'
+import type { DbSecurityScan } from '@/lib/db-types'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const { searchParams } = new URL(request.url)
     const latest = searchParams.get('latest') === 'true'
 
     if (latest) {
-      const scan = getLatestSecurityScan(params.id)
+      const scan = getLatestSecurityScan(id)
       
       if (!scan) {
         return NextResponse.json(
@@ -27,11 +29,11 @@ export async function GET(
         },
       })
     } else {
-      const scans = getSecurityScansByApp(params.id)
+      const scans = getSecurityScansByApp(id)
       
       return NextResponse.json({
         success: true,
-        scans: scans.map(s => ({
+        scans: scans.map((s: DbSecurityScan) => ({
           ...s,
           checks: JSON.parse(s.checks),
         })),

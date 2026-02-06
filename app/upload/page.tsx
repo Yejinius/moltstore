@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import Header from '@/components/Header'
 import { useAuth } from '@/lib/auth-context'
 
 export default function UploadPage() {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
   const router = useRouter()
   const [formData, setFormData] = useState({
     name: '',
@@ -79,6 +80,57 @@ export default function UploadPage() {
     const newTags = [...formData.tags]
     newTags[index] = value
     setFormData({ ...formData, tags: newTags })
+  }
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black text-white">
+        <Header />
+        <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+          <div className="text-gray-400">Loading...</div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show login prompt for non-authenticated users
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-black text-white">
+        <Header />
+        <div className="max-w-xl mx-auto px-4 py-16">
+          <div className="bg-gray-900 rounded-xl border border-gray-800 p-8 text-center">
+            <div className="w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg className="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-3">Login Required</h1>
+            <p className="text-gray-400 mb-6">
+              You need to sign in as a developer to upload apps to MoltStore.
+            </p>
+            <div className="space-y-3">
+              <Link
+                href="/login?redirect=/upload"
+                className="block w-full px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg hover:from-orange-600 hover:to-red-600 transition font-semibold"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/signup?redirect=/upload"
+                className="block w-full px-6 py-3 border border-gray-700 text-gray-300 rounded-lg hover:border-gray-600 transition font-semibold"
+              >
+                Create Developer Account
+              </Link>
+            </div>
+            <p className="text-gray-500 text-sm mt-6">
+              Already have an account? Sign in to start uploading your apps.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -68,8 +68,8 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Developer-only routes (upload, dashboard)
-  if (path.startsWith('/upload') || path.startsWith('/dashboard')) {
+  // Developer-only routes (dashboard only - upload is open to view)
+  if (path.startsWith('/dashboard')) {
     if (!user) {
       const redirectUrl = new URL('/login', request.url)
       redirectUrl.searchParams.set('redirect', path)
@@ -94,7 +94,6 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     '/admin/:path*',
-    '/upload/:path*',
     '/dashboard/:path*',
   ],
 }

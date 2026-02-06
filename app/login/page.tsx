@@ -21,14 +21,19 @@ function LoginForm() {
     e.preventDefault()
     setError('')
     setLoading(true)
+    console.log('[Login] Starting login flow...')
 
     try {
+      console.log('[Login] Calling signIn...')
       await signIn(email, password)
+      console.log('[Login] signIn completed, redirecting to:', redirect)
       router.push(redirect)
       router.refresh()
     } catch (err: any) {
+      console.error('[Login] Error:', err)
       setError(err.message || 'Failed to sign in. Please check your credentials.')
     } finally {
+      console.log('[Login] Flow complete, setting loading=false')
       setLoading(false)
     }
   }

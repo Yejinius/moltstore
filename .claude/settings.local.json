@@ -3,7 +3,26 @@
     "allow": [
       "Bash(npm install:*)",
       "Bash(test:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(ls:*)",
+      "Bash(vercel whoami:*)",
+      "Bash(vercel link:*)",
+      "Bash(vercel env add:*)",
+      "Bash(vercel env ls:*)",
+      "Bash(vercel:*)",
+      "Bash(npm run build:*)",
+      "Bash(curl:*)",
+      "WebFetch(domain:moltstore.space)",
+      "WebFetch(domain:moltbook.com)",
+      "Bash(GIT_TERMINAL_PROMPT=0 git push:*)",
+      "Bash(npx tsx:*)",
+      "Bash(source:*)",
+      "Bash(npm uninstall:*)"
+    ],
+    "additionalDirectories": [
+      "/Users/ivan/PycharmProjects/Moltstore/app/api/ai-review"
     ]
   }
 }

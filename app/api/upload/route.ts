@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import fs from 'fs/promises'
 import path from 'path'
-import { createApp, addAppFeatures, addAppTags, updateAppStatus, createSecurityScan } from '@/lib/db-adapter'
+import { createApp, addAppFeatures, addAppTags, updateAppStatus, createSecurityScan, createAIReview, updateAIReview, saveAIFindings } from '@/lib/db-adapter'
 import { autoReviewApp } from '@/lib/security'
 import { getUserFromRequest } from '@/lib/auth-supabase'
 
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     addAppFeatures(appId, appData.features.filter((f: string) => f.trim()))
     addAppTags(appId, appData.tags.filter((t: string) => t.trim()))
 
-    // 자동 보안 검증 실행
+    // 자동 보안 검증 실행 (AI 리뷰 포함)
     const reviewResult = await autoReviewApp(appId, filePath, fileHash, {
       name: appData.name,
       description: appData.description,
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     })
 
     // 보안 스캔 결과 저장
-    createSecurityScan({
+    await createSecurityScan({
       app_id: appId,
       scan_type: 'automatic',
       passed: reviewResult.securityReport.passed ? 1 : 0,
@@ -104,16 +104,58 @@ export async function POST(request: NextRequest) {
       recommendation: reviewResult.securityReport.recommendation,
     })
 
-    // 자동 심사 결과 적용
-    if (reviewResult.status === 'approved') {
-      updateAppStatus(appId, 'approved', '자동 보안 검증 통과')
-    } else if (reviewResult.status === 'rejected') {
-      updateAppStatus(appId, 'rejected', reviewResult.reason)
-    } else {
-      updateAppStatus(appId, 'in_review', '수동 심사 필요')
+    // AI 리뷰 결과가 있으면 저장
+    let aiReviewId: number | undefined
+    if (reviewResult.aiResult?.completed && reviewResult.aiResult.result) {
+      const aiResult = reviewResult.aiResult.result
+      try {
+        aiReviewId = await createAIReview({
+          app_id: appId,
+          file_hash: fileHash,
+          status: 'completed',
+          overall_score: aiResult.overallScore,
+          security_score: aiResult.securityScore,
+          agent_safety_score: aiResult.agentSafetyScore,
+          sandbox_score: aiResult.sandboxScore,
+          findings: aiResult.findings,
+          recommendation: aiResult.recommendation,
+          summary: aiResult.summary,
+          tokens_used: aiResult.tokensUsed,
+          cost_estimate: aiResult.costEstimate,
+        })
+
+        // 개별 findings 저장
+        if (aiResult.findings && aiResult.findings.length > 0) {
+          await saveAIFindings(aiReviewId, aiResult.findings)
+        }
+      } catch (err) {
+        console.error('Failed to save AI review results:', err)
+      }
+    } else if (reviewResult.aiResult?.triggered && !reviewResult.aiResult.completed) {
+      // AI 리뷰가 트리거되었지만 실패한 경우
+      try {
+        await createAIReview({
+          app_id: appId,
+          file_hash: fileHash,
+          status: 'failed',
+          summary: reviewResult.aiResult.error || 'AI review failed',
+        })
+      } catch (err) {
+        console.error('Failed to save AI review error:', err)
+      }
     }
 
-    return NextResponse.json({
+    // 자동 심사 결과 적용
+    if (reviewResult.status === 'approved') {
+      await updateAppStatus(appId, 'approved', '자동 보안 검증 통과')
+    } else if (reviewResult.status === 'rejected') {
+      await updateAppStatus(appId, 'rejected', reviewResult.reason)
+    } else {
+      await updateAppStatus(appId, 'in_review', '수동 심사 필요')
+    }
+
+    // 응답 구성
+    const response: any = {
       success: true,
       appId,
       fileHash,
@@ -121,12 +163,30 @@ export async function POST(request: NextRequest) {
       fileSize: buffer.length,
       status: reviewResult.status,
       securityScore: reviewResult.securityReport.score,
-      message: reviewResult.approved 
-        ? '앱이 자동 승인되었습니다!' 
+      message: reviewResult.approved
+        ? '앱이 자동 승인되었습니다!'
         : reviewResult.status === 'rejected'
         ? `앱이 거부되었습니다: ${reviewResult.reason}`
         : '앱이 업로드되었습니다. 수동 심사 대기 중입니다.',
-    })
+    }
+
+    // AI 리뷰 정보 추가
+    if (reviewResult.aiResult?.completed && reviewResult.aiResult.result) {
+      response.aiReview = {
+        enabled: true,
+        score: reviewResult.aiResult.result.overallScore,
+        recommendation: reviewResult.aiResult.result.recommendation,
+        findingsCount: {
+          critical: reviewResult.aiResult.result.criticalCount,
+          high: reviewResult.aiResult.result.highCount,
+          medium: reviewResult.aiResult.result.mediumCount,
+          low: reviewResult.aiResult.result.lowCount,
+        },
+        costEstimate: reviewResult.aiResult.result.costEstimate,
+      }
+    }
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error('Upload error:', error)
     return NextResponse.json(

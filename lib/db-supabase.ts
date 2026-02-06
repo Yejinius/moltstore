@@ -401,6 +401,110 @@ export const verifyDeveloper = async (userId: string, verified: boolean) => {
   if (error) throw error
 }
 
+// AI Reviews
+export interface DbAIReview {
+  id?: number
+  app_id: string
+  file_hash: string
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  overall_score?: number
+  security_score?: number
+  agent_safety_score?: number
+  sandbox_score?: number
+  findings?: any[]
+  recommendation?: 'approve' | 'reject' | 'manual_review'
+  summary?: string
+  tokens_used?: number
+  cost_estimate?: number
+  created_at?: string
+  completed_at?: string
+}
+
+export const createAIReview = async (review: Omit<DbAIReview, 'id' | 'created_at'>): Promise<number> => {
+  const { data, error } = await supabase
+    .from('ai_reviews')
+    .insert({
+      ...review,
+      findings: review.findings ? JSON.stringify(review.findings) : null,
+    })
+    .select('id')
+    .single()
+
+  if (error) throw error
+  return data.id
+}
+
+export const updateAIReview = async (
+  id: number,
+  updates: Partial<Omit<DbAIReview, 'id' | 'app_id' | 'file_hash' | 'created_at'>>
+): Promise<void> => {
+  const { error } = await supabase
+    .from('ai_reviews')
+    .update({
+      ...updates,
+      findings: updates.findings ? JSON.stringify(updates.findings) : undefined,
+      completed_at: updates.status === 'completed' || updates.status === 'failed'
+        ? new Date().toISOString()
+        : undefined,
+    })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+export const getAIReviewByApp = async (appId: string): Promise<DbAIReview | null> => {
+  const { data, error } = await supabase
+    .from('ai_reviews')
+    .select('*')
+    .eq('app_id', appId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (error) return null
+  return {
+    ...data,
+    findings: typeof data.findings === 'string' ? JSON.parse(data.findings) : data.findings
+  }
+}
+
+export const getAIReviewByHash = async (appId: string, fileHash: string): Promise<DbAIReview | null> => {
+  const { data, error } = await supabase
+    .from('ai_reviews')
+    .select('*')
+    .eq('app_id', appId)
+    .eq('file_hash', fileHash)
+    .single()
+
+  if (error) return null
+  return {
+    ...data,
+    findings: typeof data.findings === 'string' ? JSON.parse(data.findings) : data.findings
+  }
+}
+
+export const saveAIFindings = async (reviewId: number, findings: any[]): Promise<void> => {
+  const rows = findings.map(f => ({
+    review_id: reviewId,
+    severity: f.severity,
+    category: f.category,
+    title: f.title,
+    description: f.description,
+    file_path: f.filePath,
+    line_number: f.lineNumber,
+    code_snippet: f.codeSnippet,
+    suggestion: f.suggestion
+  }))
+
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from('ai_findings')
+      .insert(rows)
+
+    if (error) throw error
+  }
+}
+
 export default {
   createApp,
   addAppFeatures,
@@ -425,4 +529,9 @@ export default {
   getUserProfile,
   updateUserRole,
   verifyDeveloper,
+  createAIReview,
+  updateAIReview,
+  getAIReviewByApp,
+  getAIReviewByHash,
+  saveAIFindings,
 }

@@ -27,19 +27,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
 
   const fetchUserProfile = async (supabaseUser: User) => {
+    console.log('[Auth] Fetching user profile for:', supabaseUser.email)
+    const startTime = Date.now()
+
     const { data: profile, error } = await supabase
       .from('user_profiles')
       .select('role, full_name, developer_verified')
       .eq('id', supabaseUser.id)
       .single()
 
+    console.log('[Auth] Profile fetch completed in', Date.now() - startTime, 'ms')
+
     if (error) {
-      console.error('Error fetching user profile:', error)
+      console.error('[Auth] Error fetching user profile:', error)
       setUser(null)
       return
     }
 
     if (profile) {
+      console.log('[Auth] Profile loaded, role:', profile.role)
       setUser({
         id: supabaseUser.id,
         email: supabaseUser.email!,
@@ -60,21 +66,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
+    console.log('[Auth] Initializing auth context...')
+
     // Check active sessions
     supabase.auth.getSession()
       .then(async ({ data: { session } }) => {
+        console.log('[Auth] getSession result:', session ? 'has session' : 'no session')
         if (session?.user) {
           await fetchUserProfile(session.user)
         }
         setLoading(false)
       })
       .catch((error) => {
-        console.error('Error getting session:', error)
+        console.error('[Auth] Error getting session:', error)
         setLoading(false)
       })
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[Auth] Auth state changed:', event, session ? 'has session' : 'no session')
       if (session?.user) {
         await fetchUserProfile(session.user)
       } else {
@@ -87,14 +97,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Sign in timed out. Please check your connection.')), 15000)
-    })
+    console.log('[Auth] Starting sign in...')
+    const startTime = Date.now()
 
-    const signInPromise = supabase.auth.signInWithPassword({ email, password })
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      console.log('[Auth] Sign in completed in', Date.now() - startTime, 'ms')
 
-    const { error } = await Promise.race([signInPromise, timeoutPromise]) as any
-    if (error) throw error
+      if (error) {
+        console.error('[Auth] Sign in error:', error)
+        throw error
+      }
+
+      console.log('[Auth] Sign in successful, user:', data.user?.email)
+    } catch (err) {
+      console.error('[Auth] Sign in exception after', Date.now() - startTime, 'ms:', err)
+      throw err
+    }
   }
 
   const signUp = async (email: string, password: string, fullName: string, role: 'developer' | 'user') => {

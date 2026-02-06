@@ -35,6 +35,12 @@ export const {
   getUserProfile,
   updateUserRole,
   verifyDeveloper,
+  // AI Review functions
+  createAIReview,
+  updateAIReview,
+  getAIReviewByApp,
+  getAIReviewByHash,
+  saveAIFindings,
 } = db
 
 export default db

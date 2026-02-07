@@ -30,28 +30,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('[Auth] Fetching user profile for:', supabaseUser.email)
     const startTime = Date.now()
 
-    const { data: profile, error } = await supabase
-      .from('user_profiles')
-      .select('role, full_name, developer_verified')
-      .eq('id', supabaseUser.id)
-      .single()
+    try {
+      // Use SECURITY DEFINER function to get role (bypasses RLS issues)
+      console.log('[Auth] Calling get_user_role RPC...')
+      const { data: roleData, error: roleError } = await supabase.rpc('get_user_role')
 
-    console.log('[Auth] Profile fetch completed in', Date.now() - startTime, 'ms')
+      console.log('[Auth] RPC completed in', Date.now() - startTime, 'ms, result:', roleData, roleError)
 
-    if (error) {
-      console.error('[Auth] Error fetching user profile:', error)
-      setUser(null)
-      return
-    }
+      if (roleError) {
+        console.error('[Auth] RPC error:', roleError)
+        // Fallback to basic user
+        setUser({
+          id: supabaseUser.id,
+          email: supabaseUser.email!,
+          role: 'user' as UserRole,
+          full_name: null,
+          developer_verified: false,
+        })
+        return
+      }
 
-    if (profile) {
-      console.log('[Auth] Profile loaded, role:', profile.role)
+      const role = (roleData as string) || 'user'
+      console.log('[Auth] Profile loaded via RPC, role:', role)
+
       setUser({
         id: supabaseUser.id,
         email: supabaseUser.email!,
-        role: profile.role as UserRole,
-        full_name: profile.full_name,
-        developer_verified: profile.developer_verified,
+        role: role as UserRole,
+        full_name: null,
+        developer_verified: role === 'admin' || role === 'developer',
+      })
+    } catch (err) {
+      console.error('[Auth] Profile fetch error:', err)
+      setUser({
+        id: supabaseUser.id,
+        email: supabaseUser.email!,
+        role: 'user' as UserRole,
+        full_name: null,
+        developer_verified: false,
       })
     }
   }
